@@ -1,12 +1,10 @@
 import configparser
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
-from rgbmatrix import RGBMatrix, RGBMatrixOptions, graphics
-import time
 import requests
+import time
 from PIL import Image
 from io import BytesIO
-import colorsys
 
 # Read config file
 config = configparser.ConfigParser()
@@ -24,17 +22,6 @@ sp = spotipy.Spotify(auth_manager=SpotifyOAuth(client_id=CLIENT_ID,
                                                client_secret=CLIENT_SECRET,
                                                redirect_uri=REDIRECT_URI,
                                                scope=SCOPE))
-
-# Initialize LED matrix
-options = RGBMatrixOptions()
-options.rows = 32
-options.chain_length = 2  
-options.cols = 64
-options.hardware_mapping = 'regular'  
-matrix = RGBMatrix(options=options)
-
-font = graphics.Font()
-font.LoadFont("rpi-rgb-led-matrix/fonts/7x13.bdf")
 
 def get_current_track():
     try:
@@ -60,19 +47,6 @@ def get_dominant_color(image_url):
         print(f"Error fetching album cover: {e}")
         return (255, 0, 0)  # default to red in case of error
 
-def display_message(message, textColor):
-    offscreen_canvas = matrix.CreateFrameCanvas()
-    pos = offscreen_canvas.width
-    while True:
-        offscreen_canvas.Clear()
-        len = graphics.DrawText(offscreen_canvas, font, pos, 20, textColor, message)
-        pos -= 1
-        if (pos + len < 0):
-            pos = offscreen_canvas.width
-
-        time.sleep(0.05)
-        offscreen_canvas = matrix.SwapOnVSync(offscreen_canvas)
-
 if __name__ == "__main__":
     last_track_info = ""
     while True:
@@ -80,9 +54,11 @@ if __name__ == "__main__":
         if track_info != last_track_info:
             if album_cover_url:
                 color = get_dominant_color(album_cover_url)
-                textColor = graphics.Color(*color)
+                color_hex = '#%02x%02x%02x' % color
             else:
-                textColor = graphics.Color(255, 0, 0)  # red color for no music playing
-            display_message(track_info, textColor)
+                color_hex = '#ff0000'  # red color for no music playing
+
+            print(f"Track Info: {track_info}")
+            print(f"Dominant Color: {color_hex}")
             last_track_info = track_info
         time.sleep(2)

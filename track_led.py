@@ -43,13 +43,24 @@ def get_current_track():
         if current_track and current_track['is_playing']:
             track_name = current_track['item']['name']
             artists = ", ".join(artist['name'] for artist in current_track['item']['artists'])
-            return f"{track_name} - {artists}"
+            track_id = current_track['item']['id']
+            progress_ms = current_track['progress_ms'] / 1000.0
+            return f"{track_name} - {artists}", track_id, progress_ms
         else:
-            return "No music playing"
+            return "No music playing", None, None
     except Exception as e:
-        return f"Error fetching data: {e}"
+        return f"Error fetching data: {e}", None, None
 
-def update_leds(state):
+def get_beat_times(track_id):
+    try:
+        analysis = sp.audio_analysis(track_id)
+        beats = [beat['start'] for beat in analysis['beats']]
+        return beats
+    except Exception as e:
+        print(f"Error fetching beat times: {e}")
+        return []
+
+def update_leds(state, beat_times=None, start_time=None):
     if state == "no_music":
         GPIO.output(RED_PIN, GPIO.HIGH)
         GPIO.output(ORANGE_PIN, GPIO.LOW)
@@ -57,24 +68,42 @@ def update_leds(state):
     elif state == "playing":
         GPIO.output(RED_PIN, GPIO.LOW)
         GPIO.output(ORANGE_PIN, GPIO.LOW)
-        GPIO.output(GREEN_PIN, GPIO.HIGH)
+        if beat_times:
+            current_time = time.time() - start_time
+            next_beat_time = min((beat for beat in beat_times if beat >= current_time), default=None)
+            if next_beat_time:
+                GPIO.output(GREEN_PIN, GPIO.HIGH)
+                time.sleep(0.1)
+                GPIO.output(GREEN_PIN, GPIO.LOW)
+                time.sleep(next_beat_time - current_time)
     elif state == "error":
         GPIO.output(RED_PIN, GPIO.LOW)
         GPIO.output(ORANGE_PIN, GPIO.HIGH)
         GPIO.output(GREEN_PIN, GPIO.LOW)
 
 if __name__ == "__main__":
-    last_track_info = ""
+    last_track_id = None
+    beat_times = []
+    start_time = None
+
     while True:
-        track_info = get_current_track()
-        if track_info != last_track_info:
+        track_info, track_id, progress_ms = get_current_track()
+        if track_id != last_track_id:
             print(track_info)
             logging.info(track_info)
-            last_track_info = track_info
+            last_track_id = track_id
+
             if "Error fetching data" in track_info:
                 update_leds("error")
+                beat_times = []
             elif track_info == "No music playing":
                 update_leds("no_music")
+                beat_times = []
             else:
-                update_leds("playing")
-        time.sleep(2)
+                beat_times = get_beat_times(track_id)
+                start_time = time.time() - progress_ms
+
+        if beat_times:
+            update_leds("playing", beat_times, start_time)
+        
+        time.sleep(0.1)  # Short delay
